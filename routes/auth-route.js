@@ -13,7 +13,7 @@ router.post("/signin", signIn);
 
 router.post("/logout/:id", auth, logout);
 
-router.route("/").put(resetPasswordRequestController).post(resetPasswordController);
+router.route("/").patch(resetPasswordRequestController).post(resetPasswordController);
 
 module.exports = router;
 

@@ -1,16 +1,21 @@
 const User = require("../models/user-model");
 const handleError = require("../errorHandlers/errors");
+const QueryMethod = require("../utils/query");
 
 //Get All Users
 exports.getAll = async (req, res) => {
     try {
-        const users = await User.find();
-        res.status(200).json({
-          results: users.length,
-          data: {
-            users,
-          },
-        });
+      let queriedCarts = new QueryMethod(Cart.find(), req.query)
+        .sort()
+        .filter()
+        .limit()
+        .paginate();
+    let cart = await queriedCarts.query;
+    res.status(200).json({
+        status: "success",
+        results: cart.length,
+        data: cart,
+    }); 
     } catch (error) {
         res.status(400).json({
             status: "fail",

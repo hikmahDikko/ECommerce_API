@@ -1,6 +1,7 @@
 const express = require("express")
 const Flutterwave = require("flutterwave-node-v3");
 const Order = require("../models/order-model");
+const nodemailer = require("nodemailer");
 const Cart = require("../models/cart-model");
 const User = require("../models/user-model");
 
@@ -8,15 +9,16 @@ const flw = new Flutterwave(process.env.FLW_PUBLIC_KEY, process.env.FLW_SECRET_K
 
 exports.checkoutOrder = async (req, res) => {
     try {
-        const userid = req.user._id;
+        const userId = req.user._id;
         let payload = req.body;
-
-        let cart = await Cart.findOne({userid});
+        
+        let cart = await Order.findOne({userId});
         let user = req.user;
         
         if(cart) {
-            payload = {...payload, amount : cart.cartBill, email : user.email,};
+            payload = {...payload, enckey: process.env.FLW_ENCRYPT_KEY, amount : cart.totalAmount, email : user.email,};
             const response = await flw.Charge.card(payload);
+            
             if (response.meta.authorization.mode === 'pin') {
                 let payload2 = payload
                 payload2.authorization = {
@@ -35,19 +37,45 @@ exports.checkoutOrder = async (req, res) => {
                 })
                 
                 if(callValidate.status === 'success') {
-                    const order = await Order.create({
-                        userid,
-                        address: req.body.address,
-                        cart : cart._id,
-                        totalBill : cart.cartBill, 
+                                    
+                let order = await Order.findOne({userId});
+                let cartItems = await Cart.find({userId});
+                if (cartItems) {
+                    cartItems.map(async cartItem => {
+                        await Cart.findByIdAndDelete(cartItem._id);
+                    }) 
+                }
+                
+                let mail = nodemailer.createTransport({
+                    service : 'gmail',
+                    auth : {
+                        user : process.env.EMAIL_HOST,
+                        pass : process.env.EMAIL_PASS
+                    }
+                });
+
+                let mailOptions = {
+                    from : process.env.EMAIL_HOST,
+                    to : "dhywis31@gmail.com",
+                    subject : "Orders",
+                    text : JSON.stringify(order)
+                }
+                
+                mail.sendMail(mailOptions, function(error, info) {
+                    if (error) {
+                        console.log(error);
+                    } else {
+                        console.log('Email sent : ' + info.response);
+                    }
                 })
-                    
-                const data = await Cart.findByIdAndDelete({_id : cart._id});
                 return res.status(201).send({
                     status : "Payment successfully made",
-                    order
+                    message : "Your orders has been received",
+                    order,
+                    mailOptions
                 })
-                } if(callValidate.status === 'error') {
+                } 
+                if(callValidate.status === 'error') {
                     res.status(400).send("please try again");
                 }
                 else {
@@ -77,7 +105,7 @@ exports.getOrders = async (req, res) => {
         if(orders) {
             return res.status(200).json({
                 message : "success",
-                results : order.length,
+                results : orders.length,
                 data : {
                     orders
                 }
@@ -85,6 +113,7 @@ exports.getOrders = async (req, res) => {
         }
         res.status(404).send("No orders found");
     } catch (error) {
+        console.log(error)
         res.status(500).send(error);
     }
 };

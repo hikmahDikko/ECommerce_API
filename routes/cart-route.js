@@ -4,17 +4,18 @@ const { auth, checkUser } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-const { createCart, getCarts, updateCart, deleteCart} = cartController;
+const { createCart, getAllCarts, getOneCart, updateCart, deleteCart} = cartController;
 
 router
     .route("/:id")
     .patch(auth, updateCart)
-    .delete(auth, checkUser("vendor", "user"), deleteCart)
+    .get(auth, getOneCart)
+    .delete(auth, deleteCart)
     
 
 router
     .route("/")
     .post(auth, createCart)
-    .get(auth, getCarts);
+    .get(auth, getAllCarts);
 
 module.exports = router;

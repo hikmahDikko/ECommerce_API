@@ -8,7 +8,6 @@ const { getOrders, checkoutOrder } = orderController;
 
 router
     .route("/")
-    //.delete(auth, checkUser("vendor", "user"), deleteCart)
     .get(auth, getOrders);
 
 router.post("/checkout", auth, checkoutOrder);

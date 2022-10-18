@@ -1,4 +1,6 @@
-const Product = require("../models/product-model")
+const Product = require("../models/product-model");
+const multer = require("multer");
+const QueryMethod = require("../utils/query");
 
 //handle errors
 const handleError = (err) => {
@@ -14,10 +16,53 @@ const handleError = (err) => {
     }
 
     return errors;
-}
+};
+
+const multerStorage = multer.memoryStorage();
+
+const multerFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith("image")) {
+    cb(null, true);
+  } else {
+    res.status(400).send("Please upload only an image file");
+  }
+};
+
+
+const uploadImage = multer({
+    storage : multerStorage,
+    fileFilter : multerFilter
+});
+
+exports.uploadProductImage = uploadImage.single("image");
+
+exports.resizeImage = async (req, res) => {
+    if (req.file) {
+      let timeStamp = Date.now();
+      let id = req.params.id;
+      let productName;
+      if (id) {
+        const product = await Product.findById(id);
+        if (!product) {
+          return res,status(400),send(`There is no product with the is ${req.params.id}`);
+        }
+        productName = `${product.name}-${timeStamp}.jpeg`;
+      }
+      productName = `${req.body.name}-${timeStamp}.jpeg`;
+      req.body.image = productName;
+  
+      await sharp(req.file.buffer)
+        .resize(320, 240)
+        .toFormat("jpeg")
+        .jpeg({ quality: 80 })
+        .toFile(`public/product/img/${productName}`);
+    }
+  
+    next();
+  };
 
 //Upload a product
-exports.uploadProduct_post = async (req, res) => {
+exports.uploadProduct = async (req, res) => {
     try {
         req.body.owner = req.user._id;
         const product = await Product.create(req.body);
@@ -35,17 +80,21 @@ exports.uploadProduct_post = async (req, res) => {
     } 
 }
 
+
 //Get all Products
 exports.getAll = async (req, res) => {
     try {
-        const products = await Product.find();
+        let queriedCarts = new QueryMethod(Cart.find(), req.query)
+            .sort()
+            .filter()
+            .limit()
+            .paginate();
+        let cart = await queriedCarts.query;
         res.status(200).json({
-            status : true,
-            results : products.length,
-            data : {
-                products
-            }
-        })   
+            status: "success",
+            results: cart.length,
+            data: cart,
+      }); 
     } catch (error) {
         const errors = handleError(error)
         res.status(400).json({ errors });

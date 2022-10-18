@@ -1,191 +1,191 @@
 const Cart = require("../models/cart-model");
 const Product = require("../models/product-model");
+const Order = require("../models/order-model");
+const QueryMethod = require("../utils/query");
 
 //Create a Cart
 exports.createCart = async (req, res) => {
-    const owner = req.user._id;
-    const { products } = req.body;
-    
-    console.log(products);
-    
     try {
-        const cart = await Cart.findOne({owner});
-        for(let i = 0; i <products.length; i++) {
-            const { productid, quantity } = products[i];
-            const product = await Product.findOne({_id : productid}) 
-
-            if (!product) {
-              return res.status(404).send({message : "Product not found"})
-            }
-            const amount = product.amount;
-            const name = product.name;
-            if(cart){
-                const productIndex = cart.products.findIndex((product) => product.productid === productid);
-               
-                if (productIndex > -1) {
-                    let item = cart.products[productIndex];
-                    item.quantity += quantity;
-                    cart.cartBill = cart.products.reduce((acc, curr) => {
-                        return acc + curr.quantity * curr.amount;
-                    }, 0)
-                cart.products[productIndex] = product;
-                await cart.save();
-                
-                return res.status(200).send(updatedCart);
-                
-                } else {
-                    cart.products.push({ productid, name, quantity, amount });
-                    cart.cartBill = cart.products.reduce((acc, curr) => {
-                        return acc + curr.quantity + curr.amount
-                    }, 0);
-                    await cart.save();
-                return res.status(200).send(cart);
-                }
-            } else {
-
-                const cartProduct = {productid, name, amount, quantity}
-                
-                const newCart = await Cart.create({
-                    owner,
-                    products : cartProduct,
-                    cartBill : quantity * amount,
-                })
-                return res.status(201).json({
-                    status: "success",
-                    data : {
-                        newCart
-                    }
-                });
-            }
-        } 
-    
-    } catch (error) {
-        console.log(error);
-        res.status(500).send("Something went wrong");
-    }
-}
-
-//Update Cart
-exports.updateCart = async (req, res) => {
-    const owner = req.user._id;
-    const { productid, quantity } = req.body;
-
-    try {
+        const { productId, quantity } = req.body;
+        const userId = req.user.id;
         
+        const prod = await Product.findById(productId);
+        unitPrice = prod.amount;
         
-        
-    } catch (error) {
-        console.log(error);
-        res.status(500).send("something went wrong");
-    }
-        
-}
+        if (!prod) {
+            return res.status(400).send(`The product ${prod.name} is not available`)
+        }
 
-//Get a Cart
-exports.getCart = async (req, res) => {
-    const vendor = req.user._id;
-    try{
-        const cart = await Cart.findOne({ vendor });
+        if (prod.quantity < quantity) {
+            return res.status(400).send(`The product ${prod.name} has ${prod.quantity} available`)
+        }
 
-        if (cart && cart.products.length > 0) {
-            res.status(200).json({
-                status: "success", 
-                results : products.length,
-                data : {
-                    cart
-                }
-            })
+        amount = quantity * unitPrice;
+        const cart = await Cart.create({
+            userId,
+            productId,
+            name : prod.name,
+            quantity,
+            unitPrice,
+            amount,
+        });
+
+        const myOrder = await Order.findOne({ userId: req.user.id });
+        if (!myOrder) {
+            await Order.create({
+                userId: req.user.id,
+                cartId: [cart.id],
+                productName : [cart.name],
+                productQuantity : [cart.quantity],
+                totalAmount: amount,
+            });
         } else {
-            res.status(404).json({
-                status: "fail", 
-               message : "null"
-            })
+            let cart_Id = [...myOrder.cartId, cart.id];
+            let totalAmount = myOrder.totalAmount + amount;
+            const update = {
+                totalAmount,
+                cartId: cart_Id,
+            };
+            const order = await Order.findOneAndUpdate(
+                { userId: req.user.id },
+                { $set: update },
+                { new: true }
+            );
         }
+        
+        res.status(200).json({
+            status: "success",
+            data: { cart },
+        });
     } catch (error) {
-        res.status(500).send(null);
-    }
-}
-
-exports.getCarts = async (req, res) => {
-    const owner = req.user._id;
-    try {
-        const carts = await Cart.find({ owner : owner }).sort({ date : -1 });
-        if(carts) {
-            return res.status(200).json({
-                message : "success",
-                results : carts.length,
-                data : {
-                    carts
-                }
-            })
-        }
-        res.status(404).send("No cart found");
-    } catch (error) {
+        console.log(error)
         res.status(500).send(error);
     }
-};
-
-//Delete cart
-exports.deleteCart = async (req, res) => {
-    const vendor = req.user._id;
-    const productid = req.params.productid;
-
-    try {
-        let cart = await Cart.findOne({ owner });
-
-        const productIndex = cart.products.findIndex((product) => product.productid == productid);
-
-        if(productIndex > -1) {
-            let product = cart.products[productIndex];
-            cart.bill -= product.quantity * product.amount;
-            if(cart.bill < 0) {
-                cart.bill = 0
-            }
-        cart.products.splice(productIndex, 1);
-        cart.bill = cart.products.reduce((actaul, curent) => {
-            return actual + curent.quantity * current.amount;
-        }, 0)
-        cart = await cart.save();
-        } else {
-            res.status(404).json({
-                status : "fail",
-                message : "product not found"
-            })
-        }
-    } catch (error) {
-        console.log(error);
-        res.status(400).send();
-    }
 }
 
-//     const product = await Product.findById({_id : products.productid});
+//Get all Carts
+exports.getAllCarts = async (req, res) => {
+    try { 
+        let queriedCarts = new QueryMethod(Cart.find(), req.query)
+          .sort()
+          .filter()
+          .limit()
+          .paginate();
+        let cart = await queriedCarts.query;
+        res.status(200).json({
+          status: "success",
+          results: cart.length,
+          data: cart,
+        });
+    } catch (error) {
+        console.log(error)
+    }
+  };
+  
+  //Get a Cart
+  exports.getOneCart = async (req, res) => {
+      try {
+          const cart = await Cart.findById(req.params.id);
         
-    //     if(!product) {
-    //         res.status(404).json({
-    //             status : "fail",
-    //             message : "Product not found"
-    //         })
-    //     return;
-    //     }
+          if (!cart) {
+            return res.status(400).send(`There is no cart with the id ${req.params.id}`);
+          }
+        
+          if (req.user.id !== cart.userId.toString()) {
+            return res.status(403).send(`You are not authorized!!!!!!!`);
+          }
+        
+          res.status(200).json({
+            status: "success",
+            data: cart,
+          });
+      } catch (error) {
+          console.log(error);
+      }
+  };
+  
+  //Update Cart
+  exports.updateCart = async (req, res) => {
+      try { 
+        const cart = await Cart.findById(req.params.id);
     
-    // const amount = product.amount;
-    // const name = product.name;
+        if (req.user.id !== cart.userId.toString()) {
+            return res.status(403).send(`You are not authorized!!!!!!!`);
+        }
+        if (!cart) {
+            return res.status(400).send(`There is no cart with Id ${req.params.id}`)
+        }
+        const quantity = req.body.quantity;
+    
+        const prod = await Product.findById(cart.productId);
+        if (prod.quantity < quantity) {
+            return res.status(400).send(`The product ${prod.name} has ${prod.quantity} available`)
+        }
+    
+        amount = quantity * prod.amount;
+        const myOrder = await Order.findOne({ userId: req.user.id });
+        let totalAmount = myOrder.totalAmount - cart.amount;
+        let newAmount = totalAmount + amount;
+        const update = { amount, quantity };
+    
+        const updatedCart = await Cart.findByIdAndUpdate(
+            req.params.id,
+            { $set: update },
+            {
+                new: true,
+            }
+        );
+    
+        await Order.findOneAndUpdate(
+            { userId: req.user.id },
+            { $set: { totalAmount: newAmount } },
+            { new: true }
+        );
+    
+        res.status(200).json({
+            status: "success",
+            data: { updatedCart },
+        });
+      } catch (error) {
+          
+      }
+  };
+  
+  //Delete an Cart
+  exports.deleteCart = async (req, res) => {
+      try {
+        const cart = await Cart.findById(req.params.id);
+        if (!cart) {
+            return res.status(400).send(`There is no cart with Id ${req.params.id}`)
+        }
 
-    // const cart = await Cart.findOne({userid});
+        const myOrder = await Order.findOne({ userId: req.user.id });
+        let totalAmount = myOrder.totalAmount - cart.amount;
+        const cart_id = myOrder.cartId.filter(
+            (id) => id.toString() !== cart._id.toString()
+        );
+        const update = {
+            totalAmount,
+            cartId: cart_id,
+        };
 
-    // const cartProduct = {productid, name, amount, quantity}
-    // //If cart already exist for user,
-    // if(!cart) {
-    //     //no cart exists, create one
-    //     const newCart = await Cart.create({
-    //         userid,
-    //         products : cartProduct,
-    //         cartBill : quantity * amount,
-    //     })
-    //     return res.status(201).json({
-    //         status: "success",
-    //         data : {
-    //             newCart
-    //         }
-    //     });
-    // } 
+        await Cart.findByIdAndDelete(req.params.id);
+        if (cart_id.length === 0) {
+            await Order.findOneAndDelete({ userId: req.user.id });
+        }
+        await Order.findOneAndUpdate(
+            { userId: req.user.id },
+            { $set: update },
+            { new: true }
+        );
+
+        res.status(200).send({
+            status: "success",
+            message: "cart deleted successfully",
+        });
+          
+      } catch (error) {
+          console.log(error);
+          res.status(404).send(error)
+      }
+  };

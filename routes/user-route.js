@@ -6,7 +6,7 @@ const router = express.Router();
 
 const { getOne, getAll, deleteUser } = userController;
 
-router.get("/", auth, getAll);
+router.get("/", auth, checkUser("admin"), getAll);
 
 router
     .route("/:id")

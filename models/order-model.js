@@ -2,33 +2,39 @@ const mongoose = require("mongoose");
 const ObjectID = mongoose.Schema.Types.ObjectId;
 
 const orderSchema = new mongoose.Schema({
-    cart : [{
-        type : ObjectID,
-        ref : "Cart"
-        //required : [true, "Please input the cart ID"]
-    }],
-    userid : {
+    userId : {
         type : ObjectID,
         ref : "User",
-        //required : [true, "Please input your unique ID"]
     },
-    address : {
-        type : String,
-        required : [true, "Please enter your address"]
-    },
-    totalBill : {
+    cartId : [{
+        type : ObjectID,
+        ref : "Cart"
+    }],
+    totalAmount : {
         type : Number,
         default : 0
-    }
+    },
 });
 
-orderSchema.pre("save", function (next) {
-    this.populate({
-      path: "cart",
-      select: "products",
-    });
+orderSchema.pre(/^find/, function (next) {
+    this.populate([
+        {
+        path: "userId",
+        select: "fullname",
+        }
+    ]);
     next();
-  });
+});
+
+orderSchema.pre(/^find/, function (next) {
+    this.populate([
+        {
+        path: "cartId",
+        select: "productId name quantity amount",
+        }
+    ]);
+    next();
+});
 
 const Order = mongoose.model("Order", orderSchema);
 
